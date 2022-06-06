@@ -15,19 +15,24 @@ static uint32_t readersInLibCount = 0;
 static void* Writer(void* iblob)
 {
   int i = (int)iblob;
-  while(!quit)
+  //while(!quit)
+  for(int j=0; j<10; ++j)
   {
     pthread_mutex_lock(&libraryMutex);
       pthread_cond_wait(&condVarWriters, &libraryMutex);
     pthread_mutex_unlock(&libraryMutex);
 
-      Log(i, r, w - 1, 0, 1);
-      // write
+    Log(i, r, w - 1, 0, 1);
+    // write
 
     pthread_mutex_lock(&libraryMutex);
       pthread_cond_broadcast(&condVarReaders);
     pthread_mutex_unlock(&libraryMutex);
   }
+
+  pthread_mutex_lock(&libraryMutex);
+    pthread_cond_signal(&condVarWriters);
+  pthread_mutex_unlock(&libraryMutex);
 
   return NULL;
 }
@@ -35,7 +40,8 @@ static void* Writer(void* iblob)
 static void* Reader(void* iblob)
 {
   int i = (int)iblob;
-  while(!quit)
+  //while(!quit)
+  for(int j=0; j<10; ++j)
   {
     pthread_mutex_lock(&libraryMutex);
       pthread_cond_wait(&condVarReaders, &libraryMutex);
@@ -46,7 +52,7 @@ static void* Reader(void* iblob)
     pthread_mutex_unlock(&readerCountCheckMutex);
 
     Log(i, r - readersInLibCount, w, readersInLibCount, 0);
-   
+
     pthread_mutex_lock(&readerCountCheckMutex);
       if(--readersInLibCount == 0) 
       {
