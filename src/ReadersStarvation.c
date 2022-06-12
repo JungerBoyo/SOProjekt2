@@ -5,37 +5,34 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-static pthread_mutex_t libraryMutex          = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t readMutex             = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t readerCountCheckMutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t writerCountCheckMutex = PTHREAD_MUTEX_INITIALIZER;
+static volatile uint32_t readersInLibCount = 0;
+static volatile uint32_t writersWaitingCount = 0;
+static volatile uint32_t writerInLib = 0;
 
-static uint32_t writersInLibCount = 0;
-static uint32_t readersInLibCount = 0;
+static pthread_mutex_t condMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t condVar = PTHREAD_COND_INITIALIZER;
 
 static void* Writer(void* iblob)
 {
   int i = (int)iblob;
   while(!quit)
   {
-    pthread_mutex_lock(&writerCountCheckMutex);
-      if(++writersInLibCount == 1)
-      {
-        pthread_mutex_lock(&readMutex);
-      }
-    pthread_mutex_unlock(&writerCountCheckMutex);
+    pthread_mutex_lock(&condMutex);
+    ++writersWaitingCount;
+    while(readersInLibCount > 0 || writerInLib)
+    {
+      pthread_cond_wait(&condVar, &condMutex);
+    }
+    --writersWaitingCount;
+    writerInLib = 1;
+    pthread_mutex_unlock(&condMutex);  
 
-    pthread_mutex_lock(&libraryMutex);
-      Log(i, r, w - 1, 0, 1);
-      // write
-    pthread_mutex_unlock(&libraryMutex);
-
-    pthread_mutex_lock(&writerCountCheckMutex);
-      if(--writersInLibCount == 0)
-      {
-        pthread_mutex_unlock(&readMutex);
-      }
-    pthread_mutex_unlock(&writerCountCheckMutex);
+    Log(i, r, w - 1, 0, 1);
+    
+    pthread_mutex_lock(&condMutex);
+    writerInLib = 0;
+    pthread_cond_broadcast(&condVar);
+    pthread_mutex_unlock(&condMutex);
   }
 
   return NULL;
@@ -45,26 +42,23 @@ static void* Reader(void* iblob)
 {
   int i = (int)iblob;
   while(!quit)
-  { 
-    pthread_mutex_lock(&readMutex);
-      //pthread_mutex_lock(&readerCountCheckMutex);
-        if(++readersInLibCount == 1) 
-        {
-          pthread_mutex_lock(&libraryMutex);
-        }
-      //pthread_mutex_unlock(&readerCountCheckMutex);
-    pthread_mutex_unlock(&readMutex);
-
+  {
+    pthread_mutex_lock(&condMutex);
+    while(writersWaitingCount > 0 || writerInLib)
+    {
+      pthread_cond_wait(&condVar, &condMutex);
+    }
+    ++readersInLibCount;
+    pthread_mutex_unlock(&condMutex);
 
     Log(i, r - readersInLibCount, w, readersInLibCount, 0);
-    // read
 
-    pthread_mutex_lock(&readerCountCheckMutex);
-      if(--readersInLibCount == 0) 
-      {
-        pthread_mutex_unlock(&libraryMutex);
-      }
-    pthread_mutex_unlock(&readerCountCheckMutex);
+    pthread_mutex_lock(&condMutex);
+    if(--readersInLibCount == 0)
+    {
+      pthread_cond_broadcast(&condVar);
+    }
+    pthread_mutex_unlock(&condMutex);
   }
 
   return NULL;
@@ -72,10 +66,8 @@ static void* Reader(void* iblob)
 
 void ReadersStarvation(uint32_t r, uint32_t w)
 {
-  Run(r, Reader, w, Writer, NULL);
+  Run(r, Reader, w, Writer);
 
-  pthread_mutex_destroy(&libraryMutex);
-  pthread_mutex_destroy(&readMutex);
-  pthread_mutex_destroy(&readerCountCheckMutex);
-  pthread_mutex_destroy(&writerCountCheckMutex);
+  pthread_mutex_destroy(&condMutex);
+  pthread_cond_destroy(&condVar);
 }

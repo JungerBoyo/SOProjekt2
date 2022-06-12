@@ -52,10 +52,7 @@ static void* Reader(void* iblob)
 
 void WritersStarvation(uint32_t r, uint32_t w)
 {
-  //pthread_mutex_init(&libraryMutex, NULL);
-  //pthread_mutex_init(&readerCountCheckMutex, NULL);
-
-  Run(r, Reader, w, Writer, NULL);
+  Run(r, Reader, w, Writer);
 
   pthread_mutex_destroy(&libraryMutex);
   pthread_mutex_destroy(&readerCountCheckMutex);
