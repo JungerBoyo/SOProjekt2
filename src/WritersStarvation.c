@@ -8,7 +8,7 @@
 static pthread_mutex_t libraryMutex          = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t readerCountCheckMutex = PTHREAD_MUTEX_INITIALIZER;
 
-static uint32_t readersInLibCount = 0;
+static volatile uint32_t readersInLibCount = 0;
 
 static void* Writer(void* iblob)
 {
@@ -16,7 +16,7 @@ static void* Writer(void* iblob)
   while(!quit)
   {
     pthread_mutex_lock(&libraryMutex);
-      Log(i, r, w - 1, 0, 1);
+    Log(i, r, w - 1, 0, 1);
       // write
     pthread_mutex_unlock(&libraryMutex);
   }
@@ -30,20 +30,20 @@ static void* Reader(void* iblob)
   while(!quit)
   {
     pthread_mutex_lock(&readerCountCheckMutex);
-      if(++readersInLibCount == 1) 
-      {
-        pthread_mutex_lock(&libraryMutex);
-      }
+    if(++readersInLibCount == 1) 
+    {
+      pthread_mutex_lock(&libraryMutex);
+    }
     pthread_mutex_unlock(&readerCountCheckMutex);
 
     Log(i, r - readersInLibCount, w, readersInLibCount, 0);
     // read
 
     pthread_mutex_lock(&readerCountCheckMutex);
-      if(--readersInLibCount == 0) 
-      {
-        pthread_mutex_unlock(&libraryMutex);
-      }
+    if(--readersInLibCount == 0) 
+    {
+      pthread_mutex_unlock(&libraryMutex);
+    }
     pthread_mutex_unlock(&readerCountCheckMutex);
   }
 
